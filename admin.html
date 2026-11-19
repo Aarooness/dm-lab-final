@@ -1,4 +1,303 @@
-<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>NutriCore · Panel técnico</title><style>body{background:#f7f8f4;color:#192720;font:16px system-ui;max-width:1050px;margin:40px auto;padding:20px}a{color:#274d37}h1{font-size:38px}p{line-height:1.6;color:#61705e}article{background:white;border:1px solid #dce3d6;border-radius:12px;padding:20px;margin:14px 0;display:flex;justify-content:space-between;align-items:center;gap:25px}h3{margin:0 0 8px}button{background:#274d37;color:white;border:0;padding:13px;border-radius:8px;cursor:pointer;min-width:125px}code{font-size:13px}#message{font-weight:bold}.off{opacity:.65}label{font-weight:bold}</style><a href="/">← Volver a la tienda</a><h1>Panel técnico de extensiones</h1><p>El registro descubre los módulos. Este panel decide cuáles están disponibles. Los estados se guardan en el servidor y se conservan al reiniciarlo. Al regresar a la tienda, se actualizan las opciones.</p><p><b>Demostración local:</b> sin autenticación. Los plugins ejecutan código de confianza dentro del mismo proceso.</p><button id="refresh">Redescubrir módulos</button><p id="message" role="status"></p><section id="list"></section><h2>Cómo se conectan</h2><p><b>Núcleo:</b> valida productos y suma importes.<br><b>Contrato:</b> promociones devuelven descuentos; entregas devuelven costo.<br><b>Registro:</b> descubre módulos y filtra los activos.<br><b>Plugins:</b> implementan cada regla en su propio archivo.</p><script>
-const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function load(){try{const d=await(await fetch('/api/catalog')).json();document.getElementById('list').innerHTML=['promotion','shipping'].map(type=>'<h2>'+ (type==='promotion'?'Promociones':'Entregas')+'</h2>'+d.plugins.filter(p=>p.type===type).map(p=>`<article class="${p.enabled?'':'off'}"><div><h3>${esc(p.name)}</h3><p>${esc(p.description)}</p><code>${esc(p.file)} · ${p.enabled?'Activo':'Inactivo'}</code></div><button role="switch" aria-checked="${p.enabled}" aria-label="${esc(p.name)}" data-id="${p.id}" data-enabled="${!p.enabled}">${p.enabled?'Desactivar':'Activar'}</button></article>`).join('')).join('');document.querySelectorAll('[data-id]').forEach(b=>b.onclick=async()=>{b.disabled=true;try{const r=await fetch('/api/plugins',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:b.dataset.id,enabled:b.dataset.enabled==='true'})});if(!r.ok)throw Error('No se pudo cambiar el estado');document.getElementById('message').textContent='Estado guardado. Vuelve a la tienda para comprobar el cambio.';await load()}catch(e){document.getElementById('message').textContent=e.message;b.disabled=false}})}catch(e){document.getElementById('message').textContent=e.message}}document.getElementById('refresh').onclick=load;load();
-</script></html>
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NutriCore · Panel técnico</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #162821;
+      --muted: #52675e;
+      --green: #1d5946;
+      --deep: #102f27;
+      --lime: #d8edb8;
+      --paper: #f4f7f3;
+      --line: #dae5dd;
+      --active: #268061;
+      --inactive: #cdd9d0;
+    }
+    * { box-sizing: border-box }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 15px system-ui, sans-serif }
+    button, select { font: inherit }
+    a { color: inherit }
+    :focus-visible { outline: 3px solid #558839; outline-offset: 4px }
+    button { cursor: pointer }
+    button:disabled { cursor: wait; opacity: .65 }
+    .wrap { width: min(1180px, calc(100% - 48px)); margin-inline: auto }
+    .top { background: var(--deep); color: #fff }
+    .top .wrap, .page-head, .registry-head, .chart-head, .chart-label {
+      display: flex; align-items: center; justify-content: space-between; gap: 16px
+    }
+    .top .wrap { min-height: 69px }
+    .brand { font-size: 23px; font-weight: 900; letter-spacing: -.06em; text-decoration: none }
+    .brand span { color: var(--lime) }
+    .back { font-size: 14px; text-decoration: none }
+    .back:hover { text-decoration: underline }
+    main { padding-block: 35px 44px }
+    h1, h2, h3, p { margin: 0 }
+    h1 { font-size: clamp(30px, 4.2vw, 46px); letter-spacing: -.06em; line-height: 1.14 }
+    h2 { font-size: 19px; letter-spacing: -.025em }
+    .subtitle { color: var(--muted); margin-top: 7px; line-height: 1.5 }
+    .btn { padding: 10px 15px; min-height: 42px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--ink); font-weight: 650 }
+    .btn:hover:not(:disabled) { border-color: var(--green); background: #f1f8f1 }
+    #refresh { background: var(--green); border-color: var(--green); color: white; white-space: nowrap }
+    #refresh:hover:not(:disabled) { background: #184837 }
+    .feedback { font-size: 13px; color: var(--muted); min-height: 38px; display: flex; align-items: center }
+    .feedback.error { color: #912f28 }
+    .metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 0 0 16px }
+    .metric, .surface { background: #fff; border: 1px solid var(--line); border-radius: 14px }
+    .metric { display: flex; flex-direction: column; padding: 16px 19px; min-width: 0 }
+    .metric:first-child { background: #e8f2df; border-color: #d9e7cf }
+    .metric dt { font-size: 13px; font-weight: 650; color: var(--muted) }
+    .metric dd { margin: 2px 0 0; font-size: 34px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.06em; line-height: 1.25 }
+    .insights { display: grid; grid-template-columns: 1.5fr 1fr; gap: 16px; margin-bottom: 22px }
+    .chart { padding: 18px 20px }
+    .chart-head { flex-wrap: wrap; row-gap: 8px; margin-bottom: 14px }
+    .legend { display: flex; flex-wrap: wrap; gap: 10px; color: var(--muted); font-size: 12px }
+    .legend span { display: inline-flex; align-items: center; gap: 5px }
+    .legend i { width: 9px; height: 9px; border-radius: 2px; background: var(--active) }
+    .legend .off { background: var(--inactive) }
+    .chart-row + .chart-row { margin-top: 11px }
+    .chart-label { color: var(--muted); font-size: 13px; margin-bottom: 5px }
+    .chart-label strong { color: var(--ink); font-weight: 650 }
+    .track { background: #f0f4f0; height: 11px; border-radius: 8px; overflow: hidden; display: flex }
+    .track span:first-child { background: var(--active) }
+    .track span:last-child { background: var(--inactive) }
+    .flow { margin: 0; padding: 18px 20px; background: var(--deep); color: white; border-color: var(--deep) }
+    .flow p { color: #c6dbd0; font-size: 13px; margin-top: 10px; line-height: 1.5 }
+    .nodes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; list-style: none; margin: 13px 0 0; padding: 0 }
+    .nodes li { display: flex; align-items: center; gap: 6px; font-weight: 650; font-size: 12px }
+    .nodes span { background: #224c3f; border-radius: 6px; padding: 6px 8px }
+    .nodes li:last-child span { background: var(--lime); color: var(--deep) }
+    .nodes b { color: #aed2b6 }
+    .registry-head { padding: 17px 20px; align-items: flex-end; flex-wrap: wrap; border-bottom: 1px solid var(--line) }
+    #shown { color: var(--muted); font-size: 13px; margin-top: 4px }
+    .filters { display: flex; gap: 10px; flex-wrap: wrap }
+    .filters label { display: grid; gap: 4px; color: var(--muted); font-weight: 650; font-size: 12px }
+    select { min-height: 38px; padding: 6px 28px 6px 10px; background: white; color: var(--ink); border: 1px solid var(--line); border-radius: 7px }
+    .table-scroll { overflow-x: auto }
+    table { border-collapse: collapse; width: 100%; text-align: left }
+    th { background: #f7f9f7; color: var(--muted); font-size: 12px; font-weight: 700 }
+    th, td { padding: 11px 20px; border-bottom: 1px solid #e9efea }
+    tr:last-child td { border-bottom: 0 }
+    tbody tr:hover { background: #fafcf9 }
+    .name { font-weight: 700 }
+    .desc { display: block; color: var(--muted); font-size: 13px; line-height: 1.4; margin-top: 4px }
+    code { font-size: 12px; color: var(--muted); white-space: nowrap }
+    .state { display: inline-flex; align-items: center; gap: 5px; padding: 4px 9px; border-radius: 20px; font-size: 12px; font-weight: 700; background: #edf0ed; color: #485950 }
+    .state::before { content: ''; width: 7px; height: 7px; background: currentColor; border-radius: 50% }
+    .state.on { background: #e3f3e8; color: #1c614a }
+    .toggle { padding: 6px 10px; min-height: 35px; min-width: 97px; font-size: 13px }
+    .toggle[aria-checked="false"] { color: var(--green); border-color: #9bbdaa }
+    .empty { color: var(--muted); padding: 22px 20px }
+    footer { padding-top: 16px; color: var(--muted); font-size: 12px }
+    @media (max-width: 840px) {
+      .wrap { width: calc(100% - 32px) }
+      .insights { grid-template-columns: 1fr }
+      .file { display: none }
+      th, td { padding-inline: 12px }
+    }
+    @media (max-width: 560px) {
+      main { padding-top: 24px }
+      .page-head { align-items: flex-start; flex-direction: column }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px }
+      .metric { padding: 12px 13px }
+      .chart, .flow, .registry-head { padding: 15px }
+      .type { display: none }
+      .toggle { min-width: 82px; padding-inline: 5px }
+      .desc { font-size: 12px }
+      th, td { padding-inline: 8px }
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <a class="brand" href="/" aria-label="NutriCore, tienda">NUTRI<span>CORE</span> /</a>
+      <a class="back" href="/">← Volver a la tienda</a>
+    </div>
+  </header>
+  <main class="wrap">
+    <header class="page-head">
+      <div>
+        <h1>Panel técnico</h1>
+        <p class="subtitle">Gestiona las promociones y entregas disponibles en la tienda.</p>
+      </div>
+      <button id="refresh" class="btn" type="button">Redescubrir plugins</button>
+    </header>
+    <p id="message" class="feedback" role="status"></p>
+
+    <dl class="metrics" aria-label="Resumen del registro">
+      <div class="metric"><dt>Plugins registrados</dt><dd id="total">—</dd></div>
+      <div class="metric"><dt>Plugins activos</dt><dd id="active">—</dd></div>
+      <div class="metric"><dt>Promociones</dt><dd id="promotions">—</dd></div>
+      <div class="metric"><dt>Entregas</dt><dd id="shipping">—</dd></div>
+    </dl>
+
+    <div class="insights">
+      <section class="surface chart" aria-labelledby="chart-title">
+        <div class="chart-head">
+          <h2 id="chart-title">Estado por tipo</h2>
+          <div class="legend" aria-hidden="true"><span><i></i> Activos</span><span><i class="off"></i> Inactivos</span></div>
+        </div>
+        <div id="distribution">Cargando datos del registro…</div>
+      </section>
+      <figure class="surface flow">
+        <figcaption><h2>Recorrido del cálculo</h2></figcaption>
+        <ol class="nodes" aria-label="Secuencia de la cotización">
+          <li><span>Carrito</span><b aria-hidden="true">→</b></li>
+          <li><span>Núcleo</span><b aria-hidden="true">→</b></li>
+          <li><span>Registro</span><b aria-hidden="true">→</b></li>
+          <li><span>Plugin activo</span></li>
+        </ol>
+        <p>El plugin devuelve un descuento o un costo de entrega. El núcleo lo valida y calcula el total.</p>
+      </figure>
+    </div>
+
+    <section class="surface" aria-labelledby="registry-title">
+      <div class="registry-head">
+        <div><h2 id="registry-title">Registro de plugins</h2><p id="shown"></p></div>
+        <div class="filters">
+          <label for="kind">Tipo<select id="kind"><option value="">Todos</option><option value="promotion">Promociones</option><option value="shipping">Entregas</option></select></label>
+          <label for="status">Estado<select id="status"><option value="">Todos</option><option value="active">Activos</option><option value="inactive">Inactivos</option></select></label>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table aria-labelledby="registry-title">
+          <thead><tr><th scope="col">Plugin</th><th scope="col" class="type">Tipo</th><th scope="col" class="file">Archivo</th><th scope="col">Estado</th><th scope="col">Acción</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="empty">Cargando plugins…</p>
+    </section>
+    <footer>Panel de demostración local · Los estados se guardan en el servidor.</footer>
+  </main>
+
+  <script>
+    const byId = id => document.getElementById(id);
+    const types = { promotion: 'Promoción', shipping: 'Entrega' };
+    const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
+    let plugins = null;
+    let busy = false;
+
+    function announce(message, isError = false) {
+      const status = byId('message');
+      status.classList.toggle('error', isError);
+      status.textContent = message;
+    }
+
+    function setBusy(value) {
+      busy = value;
+      byId('refresh').disabled = value;
+      for (const button of byId('rows').querySelectorAll('button')) button.disabled = value;
+    }
+
+    function renderOverview() {
+      const promotions = plugins.filter(plugin => plugin.type === 'promotion');
+      const shipping = plugins.filter(plugin => plugin.type === 'shipping');
+      byId('total').textContent = plugins.length;
+      byId('active').textContent = plugins.filter(plugin => plugin.enabled).length;
+      byId('promotions').textContent = promotions.length;
+      byId('shipping').textContent = shipping.length;
+
+      const max = Math.max(1, promotions.length, shipping.length);
+      const groups = [['Promociones', promotions], ['Entregas', shipping]];
+      byId('distribution').innerHTML = groups.map(([label, group]) => {
+        const active = group.filter(plugin => plugin.enabled).length;
+        const inactive = group.length - active;
+        return `<div class="chart-row">
+          <div class="chart-label"><strong>${label}</strong><span>${active} ${active === 1 ? 'activo' : 'activos'} · ${inactive} ${inactive === 1 ? 'inactivo' : 'inactivos'}</span></div>
+          <div class="track" aria-hidden="true">
+            <span style="width:${active / max * 100}%"></span>
+            <span style="width:${inactive / max * 100}%"></span>
+          </div>
+        </div>`;
+      }).join('');
+    }
+
+    function renderRows() {
+      if (!plugins) return;
+      const type = byId('kind').value;
+      const status = byId('status').value;
+      const filtered = plugins.filter(plugin => {
+        const matchesType = !type || plugin.type === type;
+        const matchesStatus = !status || plugin.enabled === (status === 'active');
+        return matchesType && matchesStatus;
+      });
+      byId('shown').textContent = `${filtered.length} de ${plugins.length} plugins`;
+      byId('empty').hidden = filtered.length > 0;
+      byId('empty').textContent = 'No hay plugins que coincidan con estos filtros.';
+      byId('rows').innerHTML = filtered.map(plugin => `<tr>
+        <td><span class="name">${escapeHtml(plugin.name)}</span><span class="desc">${escapeHtml(plugin.description)}</span></td>
+        <td class="type">${escapeHtml(types[plugin.type] ?? plugin.type)}</td>
+        <td class="file"><code>${escapeHtml(plugin.file)}</code></td>
+        <td><span class="state ${plugin.enabled ? 'on' : ''}">${plugin.enabled ? 'Activo' : 'Inactivo'}</span></td>
+        <td><button type="button" class="btn toggle" role="switch" aria-label="${escapeHtml(plugin.name)}"
+          aria-checked="${plugin.enabled}" data-id="${escapeHtml(plugin.id)}" ${busy ? 'disabled' : ''}>
+          ${plugin.enabled ? 'Desactivar' : 'Activar'}</button></td>
+      </tr>`).join('');
+    }
+
+    async function refresh(showFeedback) {
+      if (busy) return;
+      setBusy(true);
+      if (showFeedback) announce('Consultando el registro…');
+      try {
+        const response = await fetch('/api/catalog');
+        if (!response.ok) throw Error('No se pudo consultar el registro.');
+        const data = await response.json();
+        plugins = data.plugins;
+        renderOverview();
+        renderRows();
+        announce(showFeedback ? 'Registro actualizado.' : '');
+      } catch {
+        if (!plugins) {
+          byId('distribution').textContent = 'Datos no disponibles.';
+          byId('empty').textContent = 'Pulsa «Redescubrir plugins» para reintentar.';
+        }
+        announce('No se pudo consultar el registro.', true);
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    async function togglePlugin(button) {
+      if (busy) return;
+      const plugin = plugins.find(entry => entry.id === button.dataset.id);
+      if (!plugin) return;
+      const enabled = !plugin.enabled;
+      setBusy(true);
+      try {
+        const response = await fetch('/api/plugins', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: plugin.id, enabled })
+        });
+        if (!response.ok) throw Error('No se pudo guardar el estado.');
+        plugin.enabled = enabled;
+        renderOverview();
+        renderRows();
+        announce(`${plugin.name}: ${enabled ? 'activo' : 'inactivo'}.`);
+      } catch {
+        announce('No se pudo guardar el estado. Inténtalo otra vez.', true);
+      } finally {
+        setBusy(false);
+        const current = Array.from(byId('rows').querySelectorAll('button')).find(item => item.dataset.id === plugin.id);
+        (current ?? byId('status')).focus();
+      }
+    }
+
+    byId('kind').addEventListener('change', renderRows);
+    byId('status').addEventListener('change', renderRows);
+    byId('refresh').addEventListener('click', () => refresh(true));
+    byId('rows').addEventListener('click', event => {
+      const button = event.target.closest('button[data-id]');
+      if (button) togglePlugin(button);
+    });
+    refresh(false);
+  </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 # NutriCore
 Tienda académica en Node.js. Ejecutar `node server.cjs` y abrir http://127.0.0.1:8025.
 
-Microkernel: server.cjs contiene catálogo, registro, validación y suma de importes. plugins/*.js implementan las promociones. La UI presenta combos y el panel técnico está plegado al pie.
+Microkernel: `server.cjs` contiene catálogo, registro, validación y suma de importes. Los archivos de `plugins/` implementan promociones y entregas. La sección técnica al pie de la tienda enlaza a `/admin`.
 
 Contrato: id, name, description, bundle (IDs del catálogo), badge, apply({items,subtotal}) → {discounts:{id:importe},reason}. Una promoción por carrito. El registro descubre archivos .js sin editar el núcleo. Extensiones de confianza en el mismo proceso, sin sandbox.
 
@@ -16,7 +16,9 @@ Arranque desde esta carpeta: `node server.cjs`.
 - **Núcleo:** `quote()` en `server.cjs` valida catálogo, cantidades, descuentos y costo de entrega. Suma productos menos descuentos más envío.
 - **Contrato:** promociones usan `apply({items,subtotal})` y devuelven `{discounts,reason}`. Entregas declaran `type:'shipping'`, reciben `{items,subtotal,total}` y devuelven `{cost,reason}`. Los módulos necesitan un ID y una función `apply`.
 - **Registro:** `registry()` descubre archivos de `plugins/`, carga sus exportaciones y consulta `plugin-state.json`. Los módulos anteriores sin `type` pertenecen a `promotion`.
-- **Plugins:** combo, shaker y volumen calculan descuentos. Estándar cobra S/12, exprés S/22 y recojo S/0. Son tarifas y plazos ficticios.
+- **Plugins:** cinco promociones y tres entregas. Las promociones incluyen Combo fuerza, Shaker de regalo, Compra grande, Pack bienestar (S/10 de descuento al combinar creatina y multivitamínico) y Whey aislada (10 % de descuento). Estándar cobra S/12, exprés S/22 y recojo S/0. Son tarifas y plazos ficticios.
+
+El panel muestra recuentos del registro, barras de disponibilidad por tipo y un diagrama del cálculo. Los filtros por tipo y estado acotan la lista de plugins. «Redescubrir plugins» vuelve a leer el catálogo tras añadir un archivo.
 
 El panel guarda la activación por ID en `plugin-state.json`. Al volver a la ventana de la tienda se actualiza el catálogo. Una selección desactivada se limpia. El servidor rechaza invocar un plugin inactivo aunque el cliente envíe su ID directamente.
 
