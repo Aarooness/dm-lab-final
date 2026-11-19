@@ -1,0 +1,1 @@
+module.exports = {id:'standard',type:'shipping',name:'Envío estándar',description:'Entrega referencial de 2 a 4 días. Tarifa fija S/12.',apply:()=>({cost:12,reason:'Envío estándar: tarifa fija S/12.'})};

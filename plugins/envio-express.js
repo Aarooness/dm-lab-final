@@ -1,0 +1,1 @@
+module.exports = {id:'express',type:'shipping',name:'Envío exprés',description:'Entrega referencial al día siguiente. Tarifa fija S/22.',apply:()=>({cost:22,reason:'Envío exprés: tarifa fija S/22.'})};
